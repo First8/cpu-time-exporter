@@ -9,14 +9,18 @@
  */
 
 package powermonitoring;
-import io.javalin.Javalin;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.prometheus.client.CollectorRegistry;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,7 +60,7 @@ public class MonitoringHandler implements Runnable {
 	private final MeterRegistry registry;
 	private boolean destroyingVM = false;
 
-	public MonitoringHandler(AgentProperties properties, MeterRegistry registry) {
+	public MonitoringHandler(AgentProperties properties, MeterRegistry registry) throws IOException {
 		this.properties = properties;
 		this.registry = registry;
 		this.threadBean = createThreadBean();
@@ -83,21 +87,33 @@ public class MonitoringHandler implements Runnable {
 
 		return threadBean;
 	}
+	private void startPrometheusEndpoint(MeterRegistry registry) throws IOException {
 
-	private void startPrometheusEndpoint(MeterRegistry registry) {
-		Javalin app = Javalin.create().start(9100);
-		app.get("/metrics", ctx -> {
-			StringBuilder metrics = new StringBuilder();
+		HttpServer server = HttpServer.create(new InetSocketAddress(9100), 0);
 
-			prometheusMeters.forEach((methodName, gauge) -> {
-				double value = gauge.value();
-				metrics.append(String.format("method_time_seconds{method_name=\"%s\"} %.6f\n", methodName, value));
-			});
 
-			ctx.result(metrics.toString()).contentType("text/plain");
+		server.createContext("/metrics", new HttpHandler() {
+			@Override
+			public void handle(HttpExchange exchange) throws IOException {
+				StringBuilder metrics = new StringBuilder();
+
+
+				prometheusMeters.forEach((methodName, gauge) -> {
+					double value = gauge.value();
+					metrics.append(String.format("method_time_seconds{method_name=\"%s\"} %.6f\n", methodName, value));
+				});
+
+				String response = metrics.toString();
+				exchange.sendResponseHeaders(200, response.getBytes().length);
+				OutputStream os = exchange.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
+			}
 		});
-	}
 
+
+		server.start();
+	}
 	@Override
 	public void run() {
 		log.info(String.format("Started monitoring application with ID %d", 1));

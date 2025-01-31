@@ -1,10 +1,10 @@
 package powermonitoring;
 
 import com.sun.management.OperatingSystemMXBean;
-import io.javalin.Javalin;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
+import java.io.IOException;
 import java.lang.instrument.Instrumentation;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -21,7 +21,7 @@ public class Agent {
      * After the Java Virtual Machine (JVM) has initialized, the premain method
      * will be called. Then the real application main method will be called.
      */
-    public static void premain(String args, Instrumentation inst) {
+    public static void premain(String args, Instrumentation inst) throws IOException {
         Thread.currentThread().setName(NAME_THREAD_NAME);
         logger.info("+---------------------------------+");
         logger.info("| Cpu-Time-Exporter Agent Version 1.0.0    |");
