@@ -9,9 +9,11 @@
  */
 
 package powermonitoring;
-
+import io.javalin.Javalin;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.prometheus.client.CollectorRegistry;
+
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -23,6 +25,7 @@ import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+
 /**
  * The MonitoringHandler performs all the sampling and energy computation step, and stores
  * the data in dedicated MonitoringStatus structures or in files.
@@ -30,7 +33,6 @@ import java.util.logging.Logger;
 // TODO lots of commented code, should decide what to use or not (for now just tryout)
 
 public class MonitoringHandler implements Runnable {
-
 	private static final Logger log = Logger.getLogger(MonitoringHandler.class.getName());
 
 	private static final String DESTROY_THREAD_NAME = "DestroyJavaVM";
@@ -62,6 +64,8 @@ public class MonitoringHandler implements Runnable {
 		this.sampleIterations = (int) (sampleTimeMilliseconds / sampleRateMilliseconds);
 		log.info("Starting monitoring thread");
 		new Thread(this, COMPUTATION_THREAD_NAME).start();
+		startPrometheusEndpoint(registry);
+
 	}
 
 	private static ThreadMXBean createThreadBean() {
@@ -78,6 +82,20 @@ public class MonitoringHandler implements Runnable {
 		}
 
 		return threadBean;
+	}
+
+	private void startPrometheusEndpoint(MeterRegistry registry) {
+		Javalin app = Javalin.create().start(9100);
+		app.get("/metrics", ctx -> {
+			StringBuilder metrics = new StringBuilder();
+
+			prometheusMeters.forEach((methodName, gauge) -> {
+				double value = gauge.value();
+				metrics.append(String.format("method_time_seconds{method_name=\"%s\"} %.6f\n", methodName, value));
+			});
+
+			ctx.result(metrics.toString()).contentType("text/plain");
+		});
 	}
 
 	@Override
@@ -179,7 +197,7 @@ public class MonitoringHandler implements Runnable {
 
 			for (var entry : statEntry.getValue().entrySet()) {
 				if (entry.getKey().toString().contains("org.springframework.samples.petclinic.powermonitoring")) {
-					// continue; // skip all classes from this package so that we do not
+					 continue; // skip all classes from this package so that we do not
 				}
 				K methodName = entry.getKey();
 				int methodOccurrences = entry.getValue();

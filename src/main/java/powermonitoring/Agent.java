@@ -1,6 +1,7 @@
 package powermonitoring;
 
 import com.sun.management.OperatingSystemMXBean;
+import io.javalin.Javalin;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
@@ -9,7 +10,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 public class Agent {
 
     public static final String NAME_THREAD_NAME = "Cpu Time Exporter";
@@ -37,7 +37,7 @@ public class Agent {
         MeterRegistry registry = new SimpleMeterRegistry();
         // Create MonitoringHandler object
         MonitoringHandler monitoringHandler = new MonitoringHandler(properties,registry);
-
+        Agent agent = new Agent();
         logger.log(Level.INFO, "Initialization finished");
 
         // Start the monitoring thread
