@@ -1,20 +1,9 @@
-/*
- * Copyright (c) 2021-2024, Adel Noureddine, Université de Pau et des Pays de l'Adour.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the
- * GNU General Public License v3.0 only (GPL-3.0-only)
- * which accompanies this distribution, and is available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html
- *
- */
+package nl.first8.cputimeexporter.service;
 
-package powermonitoring;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.prometheus.client.CollectorRegistry;
+import nl.first8.cputimeexporter.config.AgentProperties;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -26,20 +15,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
-/**
- * The MonitoringHandler performs all the sampling and energy computation step, and stores
- * the data in dedicated MonitoringStatus structures or in files.
- */
-// TODO lots of commented code, should decide what to use or not (for now just tryout)
-
-public class MonitoringHandler implements Runnable {
-	private static final Logger log = Logger.getLogger(MonitoringHandler.class.getName());
-
-	private static final String DESTROY_THREAD_NAME = "DestroyJavaVM";
+public class MonitoringService implements Runnable {
+	private static final Logger log = Logger.getLogger(MonitoringService.class.getName());
 
 	public static final String COMPUTATION_THREAD_NAME = "Method usage calculation";
 
@@ -47,36 +26,41 @@ public class MonitoringHandler implements Runnable {
 
 	private final ThreadMXBean threadBean;
 
-	private final long sampleTimeMilliseconds = 1000;
+	private static final long SAMPLE_TIME_MILLISECONDS = 1000;
 
 	private final long sampleRateMilliseconds;
 
 	private final int sampleIterations;
 
-	private Map<String, Gauge> prometheusMeters = new HashMap<>();
+	private final Map<String, Gauge> prometheusMeters = new HashMap<>();
 
-	private Map<String, Double> prometheusMeterValues = new HashMap<>();
+	private final Map<String, Double> prometheusMeterValues = new HashMap<>();
 
 	private final MeterRegistry registry;
-	private boolean destroyingVM = false;
+	private boolean destroyingVM = false; //todo rethink if we need this? we are running as deamon thread. Also; if we need it we should alter the state somewhere
 
-	public MonitoringHandler(AgentProperties properties, MeterRegistry registry) throws IOException {
+	public MonitoringService(AgentProperties properties, MeterRegistry registry) {
 		this.properties = properties;
 		this.registry = registry;
 		this.threadBean = createThreadBean();
 		this.sampleRateMilliseconds = 10; // default
-		this.sampleIterations = (int) (sampleTimeMilliseconds / sampleRateMilliseconds);
+		this.sampleIterations = (int) (SAMPLE_TIME_MILLISECONDS / sampleRateMilliseconds);
+		try {
+			startMetricsEndpoint();
+		} catch (IOException e) {
+			log.severe(() -> String.format("Cannot perform IO \"%s\"", e.getMessage()));
+			System.exit(1);
+		}
+
 		log.info("Starting monitoring thread");
 		new Thread(this, COMPUTATION_THREAD_NAME).start();
-		startPrometheusEndpoint(registry);
-
 	}
 
 	private static ThreadMXBean createThreadBean() {
 		ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
 		// Check if CPU Time measurement is supported by the JVM. Quit otherwise
 		if (!threadBean.isThreadCpuTimeSupported()) {
-			log.log(Level.SEVERE, "Thread CPU Time is not supported on this Java Virtual Machine. Existing...");
+			log.severe("Thread CPU Time is not supported on this Java Virtual Machine. Existing...");
 			System.exit(1);
 		}
 
@@ -87,53 +71,46 @@ public class MonitoringHandler implements Runnable {
 
 		return threadBean;
 	}
-	private void startPrometheusEndpoint(MeterRegistry registry) throws IOException {
 
+	private void startMetricsEndpoint() throws IOException {
 		HttpServer server = HttpServer.create(new InetSocketAddress(9100), 0);
 
+		server.createContext("/metrics", exchange -> {
+            StringBuilder metrics = new StringBuilder();
 
-		server.createContext("/metrics", new HttpHandler() {
-			@Override
-			public void handle(HttpExchange exchange) throws IOException {
-				StringBuilder metrics = new StringBuilder();
+            prometheusMeters.forEach((methodName, gauge) -> {
+                double value = gauge.value();
+                metrics.append(String.format("method_time_seconds{method_name=\"%s\"} %.6f%n", methodName, value));
+            });
 
-
-				prometheusMeters.forEach((methodName, gauge) -> {
-					double value = gauge.value();
-					metrics.append(String.format("method_time_seconds{method_name=\"%s\"} %.6f\n", methodName, value));
-				});
-
-				String response = metrics.toString();
-				exchange.sendResponseHeaders(200, response.getBytes().length);
-				OutputStream os = exchange.getResponseBody();
-				os.write(response.getBytes());
-				os.close();
-			}
-		});
+            String response = metrics.toString();
+            exchange.sendResponseHeaders(200, response.getBytes().length);
+            OutputStream os = exchange.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+        });
 
 
 		server.start();
 	}
+
 	@Override
 	public void run() {
-		log.info(String.format("Started monitoring application with ID %d", 1));
-
-		// CPU time for each thread
+		log.info("Started monitoring application");
+        // CPU time for each thread
 		while (!destroyingVM) {
 			try {
 
 				var samples = sample();
 				var methodsStatsFiltered = extractStats(samples, properties::filtersMethod);
+				// TODO group all methods that are in properties.groupingMethodNames
+				// TODO make this this grouping does not collide with the filteredMethodNames (those should still be separate)
 				this.calculateAndStoreMethodTimeInSeconds(methodsStatsFiltered);
 
 				Thread.sleep(sampleRateMilliseconds);
 			}
 			catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
-			}
-			catch (IOException exception) {
-				log.log(Level.SEVERE, "Cannot perform IO \"{0}\"", exception.getMessage());				// log.throwing(getClass().getName(), "run", exception);
-				// System.exit(1);
 			}
 		}
 		log.info("Stopping monitoring application");
@@ -148,11 +125,10 @@ public class MonitoringHandler implements Runnable {
 	private Map<Thread, List<StackTraceElement[]>> sample() {
 		Map<Thread, List<StackTraceElement[]>> result = new HashMap<>();
 		try {
-			for (int duration = 0; duration < sampleTimeMilliseconds; duration += sampleRateMilliseconds) {
+			for (long duration = 0; duration < SAMPLE_TIME_MILLISECONDS; duration += sampleRateMilliseconds) {
 				for (var entry : Thread.getAllStackTraces().entrySet()) {
 					String threadName = entry.getKey().getName();
 					// Ignoring agent related threads, if option is enabled
-					// TODO ignore the thread of monitoringhandler
 					if (this.properties.hideAgentConsumption() && (threadName.equals(COMPUTATION_THREAD_NAME))) {
 						continue; // Ignoring the thread
 					}
@@ -204,7 +180,7 @@ public class MonitoringHandler implements Runnable {
 		return stats;
 	}
 
-	public <K> void calculateAndStoreMethodTimeInSeconds(Map<Thread, Map<K, Integer>> stats) throws IOException {
+	public <K> void calculateAndStoreMethodTimeInSeconds(Map<Thread, Map<K, Integer>> stats) {
 		log.info("Saving results with time spent in methods (in seconds)");
 
 		for (var statEntry : stats.entrySet()) {
@@ -212,6 +188,7 @@ public class MonitoringHandler implements Runnable {
 			double threadCpuTimeInSeconds = threadBean.getThreadCpuTime(threadId) / 1_000_000_000.0; // Convert nanoseconds to seconds
 
 			for (var entry : statEntry.getValue().entrySet()) {
+				// TODO this should be dependent on properties.hideagentconsumption (and package name should be fixed)
 				if (entry.getKey().toString().contains("org.springframework.samples.petclinic.powermonitoring")) {
 					 continue; // skip all classes from this package so that we do not
 				}
@@ -221,7 +198,7 @@ public class MonitoringHandler implements Runnable {
 
 				// Merge method time into prometheusMeterValues
 				prometheusMeterValues.merge(methodName.toString(), timeSpentInSeconds, Double::sum);
-				log.info("Current value for method: " + methodName + " is: " + prometheusMeterValues.get(methodName.toString()));
+				log.info(() -> "Current value for method: " + methodName + " is: " + prometheusMeterValues.get(methodName.toString()));
 
 				if (!prometheusMeters.containsKey(methodName.toString())) {
 					// Register the gauge for the method if it is not registered
@@ -231,10 +208,10 @@ public class MonitoringHandler implements Runnable {
 							.register(registry);
 
 					prometheusMeters.put(methodName.toString(), gauge);
-					log.info("Gauge registered for method: " + methodName);  // Log after registering the gauge
+					log.info(() -> "Gauge registered for method: " + methodName);  // Log after registering the gauge
 				}
 
-				log.info(String.format("Method: %s, Time Spent: %.2f seconds", methodName, timeSpentInSeconds));
+				log.info(() -> String.format("Method: %s, Time Spent: %.2f seconds", methodName, timeSpentInSeconds));
 			}
 		}
 	}
