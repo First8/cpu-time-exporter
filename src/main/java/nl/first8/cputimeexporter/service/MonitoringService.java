@@ -37,7 +37,6 @@ public class MonitoringService implements Runnable {
 	private final Map<String, Double> prometheusMeterValues = new HashMap<>();
 
 	private final MeterRegistry registry;
-	private boolean destroyingVM = false; //todo rethink if we need this? we are running as deamon thread. Also; if we need it we should alter the state somewhere
 
 	public MonitoringService(AgentProperties properties, MeterRegistry registry) {
 		this.properties = properties;
@@ -80,7 +79,7 @@ public class MonitoringService implements Runnable {
 
             prometheusMeters.forEach((methodName, gauge) -> {
                 double value = gauge.value();
-                metrics.append(String.format("method_time_seconds{method_name=\"%s\"} %.6f%n", methodName, value));
+                metrics.append(String.format("method_cpu_time_in_seconds{method_name=\"%s\"} %.6f%n", methodName, value));
             });
 
             String response = metrics.toString();
@@ -98,11 +97,11 @@ public class MonitoringService implements Runnable {
 	public void run() {
 		log.info("Started monitoring application");
         // CPU time for each thread
-		while (!destroyingVM) {
+		while (true) { //NOSONAR While loop will stop when the jvm is destroyed.
 			try {
 
 				var samples = sample();
-				var methodsStatsFiltered = extractStats(samples, properties::filtersMethod);
+				var methodsStatsFiltered = extractStats(samples, properties::isInPackageToMonitor);
 				// TODO group all methods that are in properties.groupingMethodNames
 				// TODO make this this grouping does not collide with the filteredMethodNames (those should still be separate)
 				this.calculateAndStoreMethodTimeInSeconds(methodsStatsFiltered);
@@ -110,15 +109,15 @@ public class MonitoringService implements Runnable {
 				Thread.sleep(sampleRateMilliseconds);
 			}
 			catch (InterruptedException exception) {
+				log.severe("Stopping monitoring application due to interruption" + exception.getMessage());
 				Thread.currentThread().interrupt();
 			}
 		}
-		log.info("Stopping monitoring application");
 	}
 
 	/**
 	 * Performs the sampling step. Collects a set of stack traces for each thread. The
-	 * sampling step is performed multiple time at the frequecy of
+	 * sampling step is performed multiple time at the frequency of
 	 * SAMPLE_RATE_MILLSECONDS, for the duration of SAMPLE_TIME_MILLISECONDS
 	 * @return for each Thread, a List of it's the stack traces
 	 */
@@ -151,8 +150,8 @@ public class MonitoringService implements Runnable {
 	}
 
 	/**
-	 * Return the occurences of each method call during monitoring loop, per thread.
-	 * @param samples the result of the sampking step. A List of StackTraces of each
+	 * Return the occurrences of each method call during monitoring loop, per thread.
+	 * @param samples the result of the sampling step. A List of StackTraces of each
 	 * Thread
 	 * @param covers a Predicate, used to filter method names
 	 * @return for each Thread, a Map of each method and its occurences during the last
@@ -181,7 +180,7 @@ public class MonitoringService implements Runnable {
 	}
 
 	public <K> void calculateAndStoreMethodTimeInSeconds(Map<Thread, Map<K, Integer>> stats) {
-		log.info("Saving results with time spent in methods (in seconds)");
+		log.fine("Saving results with time spent in methods (in seconds)");
 
 		for (var statEntry : stats.entrySet()) {
 			long threadId = statEntry.getKey().getId();

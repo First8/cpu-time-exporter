@@ -12,32 +12,25 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Agent properties configured by the config.properties file
- */
 public class AgentProperties {
     private static final Logger log = Logger.getLogger(AgentProperties.class.getName());
 
     // Properties names in the config.properties file
-    private static final String FILTER_METHOD_NAME_PROPERTY = "filter-method-names";
-    private static final String GROUPING_METHOD_NAME_PROPERTY = "grouping-method-names";
-    private static final String LOGGER_LEVEL_PROPERTY = "logger-level";
+    private static final String PACKAGE_NAME_TO_MONITOR_PROPERTY = "package-names-to-monitor";
+    private static final String GROUPING_PACKAGE_NAME_PROPERTY = "grouping-package-names";
     private static final String HIDE_AGENT_CONSUMPTION_PROPERTY = "hide-agent-consumption";
 
     private final Properties loadedProperties;
-    private final Collection<String> filterMethodNames;
-    private final Collection<String> groupingMethodNames;
-    private final Level loggerLevel;
+    private final Collection<String> packageNamesToMonitor;
+    private final Collection<String> groupingPackageNames;
     private final boolean hideAgentConsumption;
 
     public AgentProperties(FileSystem fileSystem) {
         this.loadedProperties = loadProperties(fileSystem);
-        this.filterMethodNames = loadFilterMethodNames();
-        this.groupingMethodNames = loadGroupingMethodNames();
-        this.loggerLevel = loadLoggerLevel();
+        this.packageNamesToMonitor = loadPackageNames();
+        this.groupingPackageNames = loadGroupingPackageNames();
         this.hideAgentConsumption = loadAgentConsumption();
     }
 
@@ -45,17 +38,13 @@ public class AgentProperties {
         this(FileSystems.getDefault());
     }
 
-    public boolean filtersMethod(String methodName) {
-        for (String filterMethod : filterMethodNames) {
+    public boolean isInPackageToMonitor(String methodName) {
+        for (String filterMethod : packageNamesToMonitor) {
             if (methodName.startsWith(filterMethod)) {
                 return true;
             }
         }
         return false;
-    }
-
-    public Level getLoggerLevel() {
-        return loggerLevel;
     }
 
     public boolean hideAgentConsumption() {
@@ -70,43 +59,31 @@ public class AgentProperties {
             try (InputStream input = new BufferedInputStream(Files.newInputStream(path))) {
                 result.load(input);
             } catch (IOException e) {
-                log.info("Couldn't load local config: \"{0}\"");
+                log.severe("Couldn't load local config: \"{0}\", exiting...");
+                System.exit(1);
             }
         });
 
         return result;
     }
 
-    private Collection<String> loadFilterMethodNames() {
-        String filterMethods = loadedProperties.getProperty(FILTER_METHOD_NAME_PROPERTY);
-        if (filterMethods == null || filterMethods.isEmpty()) { // TODO remove this if
-            return Set.of("org.springframework.samples.petclinic");
+    private Collection<String> loadPackageNames() {
+        String methods = loadedProperties.getProperty(PACKAGE_NAME_TO_MONITOR_PROPERTY);
+        log.info(methods);
+        if (methods == null || methods.isEmpty()) {
+            log.severe("MethodNames is empty, no methods to monitor. Exiting...");
+            System.exit(1);
         }
-        if (filterMethods == null || filterMethods.isEmpty()) {
-            return Collections.emptySet();
-        }
-        return Set.of(filterMethods.split(","));
+        return Set.of(methods.split(","));
     }
 
-    private Collection<String> loadGroupingMethodNames() {
-        String groupingMethods = loadedProperties.getProperty(GROUPING_METHOD_NAME_PROPERTY);
-        if (groupingMethods == null || groupingMethods.isEmpty()) {
+    private Collection<String> loadGroupingPackageNames() {
+        String groupingPackages = loadedProperties.getProperty(GROUPING_PACKAGE_NAME_PROPERTY);
+        log.info(groupingPackages);
+        if (groupingPackages == null || groupingPackages.isEmpty()) {
             return Collections.emptySet();
         }
-        return Set.of(groupingMethods.split(","));
-    }
-
-    public Level loadLoggerLevel() {
-        String property = loadedProperties.getProperty(LOGGER_LEVEL_PROPERTY);
-        if (property == null) {
-            return Level.INFO;
-        }
-
-        try {
-            return Level.parse(property);
-        } catch (IllegalArgumentException exception) {
-            return Level.INFO;
-        }
+        return Set.of(groupingPackages.split(","));
     }
 
     public boolean loadAgentConsumption() {
@@ -114,7 +91,7 @@ public class AgentProperties {
     }
 
     private Optional<Path> getPropertiesPathIfExists(FileSystem fileSystem) {
-        Path path = fileSystem.getPath(System.getProperty("joularjx.config", "config.properties"));
+        Path path = fileSystem.getPath(System.getProperty("cputimeexporter.config", "config.properties"));
 
         if (Files.notExists(path)) {
             log.info("Could not locate config.properties, will use default values");

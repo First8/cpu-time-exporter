@@ -1,10 +1,31 @@
 # cpu-time exporter
 A java agent that exposes prometheus metrics with cpu-time metrics of used methods. The goal of this project is to support the data we receive from kepler on AKS. By combining the data of this project and that from kepler, we are able to get detailed information of power usage of our apps in any environment. 
 
-# how to 
+Features:
+- Java agent, no source code changes required
+- Monitor cpu-time of methods to combine with i.e. kepler data
+- TODO: Example grafana dashboard
+- TODO: Makefile to create an image for your application jar
 
-TODO
 
+# Usage
+
+Requirements
+- Java 11+
+- Maven
+
+## Compile
+To build the cpu-time-exporter, run:
+```
+./mvnw clean install -DskipTests
+```
+
+As alternative, you can also download the latest release on https://github.com/First8/cpu-time-exporter/releases
+
+## Run
+```
+java -javaagent:cpu-time-exporter-$version.jar -jar yourJar.jar -Dcputimeexporter.config=config.properties
+```
 
 # License & Attribution
 

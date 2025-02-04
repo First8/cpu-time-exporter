@@ -9,8 +9,8 @@
 
     <properties>
         <!-- 17 so that we are compatible with more projects, maybe even go lower later -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <micrometer-registry-prometheus.version>1.11.3</micrometer-registry-prometheus.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
