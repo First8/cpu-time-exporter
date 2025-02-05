@@ -21,17 +21,20 @@ public class AgentProperties {
     private static final String PACKAGE_NAME_TO_MONITOR_PROPERTY = "package-names-to-monitor";
     private static final String GROUPING_PACKAGE_NAME_PROPERTY = "grouping-package-names";
     private static final String HIDE_AGENT_CONSUMPTION_PROPERTY = "hide-agent-consumption";
+    private static final String PORT_PROPERTY = "port";
 
     private final Properties loadedProperties;
     private final Collection<String> packageNamesToMonitor;
     private final Collection<String> groupingPackageNames;
     private final boolean hideAgentConsumption;
+    private final int port;
 
     public AgentProperties(FileSystem fileSystem) {
         this.loadedProperties = loadProperties(fileSystem);
         this.packageNamesToMonitor = loadPackageNames();
         this.groupingPackageNames = loadGroupingPackageNames();
         this.hideAgentConsumption = loadAgentConsumption();
+        this.port = loadPort();
     }
 
     public AgentProperties() {
@@ -47,8 +50,16 @@ public class AgentProperties {
         return false;
     }
 
-    public boolean hideAgentConsumption() {
+    public boolean getHideAgentConsumption() {
         return this.hideAgentConsumption;
+    }
+
+    public int getPort() {
+        return this.port;
+    }
+
+    public Collection<String> getGroupingPackageNames() {
+        return this.groupingPackageNames;
     }
 
     private Properties loadProperties(FileSystem fileSystem) {
@@ -88,6 +99,10 @@ public class AgentProperties {
 
     public boolean loadAgentConsumption() {
         return Boolean.parseBoolean(loadedProperties.getProperty(HIDE_AGENT_CONSUMPTION_PROPERTY));
+    }
+
+    public int loadPort() {
+        return Integer.parseInt(loadedProperties.getProperty(PORT_PROPERTY));
     }
 
     private Optional<Path> getPropertiesPathIfExists(FileSystem fileSystem) {
