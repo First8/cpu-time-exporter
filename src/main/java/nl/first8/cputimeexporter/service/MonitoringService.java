@@ -146,16 +146,17 @@ public class MonitoringService implements Runnable {
 		return stats;
 	}
 
-	public <K> void calculateAndStoreMethodTimeInSeconds(Map<Thread, Map<K, Integer>> stats) {
+	<K> void calculateAndStoreMethodTimeInSeconds(Map<Thread, Map<K, Integer>> stats) {
 		log.fine("Saving results with time spent in methods (in seconds)");
 
 		for (var statEntry : stats.entrySet()) {
 			long threadId = statEntry.getKey().getId();
-			double threadCpuTimeInSeconds = threadBean.getThreadCpuTime(threadId) / 1_000_000_000.0; // Convert nanoseconds to seconds
-			if (threadCpuTimeInSeconds == -1) {
+			long threadCpuTime = threadBean.getThreadCpuTime(threadId);
+			if (threadCpuTime == -1) {
 				log.warning(() -> "Thread CPU time is unavailable for thread ID: " + threadId);
 				continue;
 			}
+			double threadCpuTimeInSeconds = threadCpuTime / 1_000_000_000.0; // Convert nanoseconds to seconds
 
 			for (var entry : statEntry.getValue().entrySet()) {
 				K methodName = entry.getKey();
