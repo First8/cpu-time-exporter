@@ -4,9 +4,6 @@ A java agent that exposes prometheus metrics with cpu-time metrics of used metho
 Features:
 - Java agent, no source code changes required
 - Monitor cpu-time of methods to combine with i.e. kepler data
-- TODO: Example grafana dashboard
-- TODO: Makefile to create an image for your application jar
-
 
 # Usage
 
