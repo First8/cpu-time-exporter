@@ -47,7 +47,7 @@ public class Agent {
         }));
     }
 
-    private static HTTPServer startHttpServer(AgentProperties properties, PrometheusRegistry registry) {
+    static HTTPServer startHttpServer(AgentProperties properties, PrometheusRegistry registry) {
         try {
             return HTTPServer.builder()
                     .port(properties.getPort())

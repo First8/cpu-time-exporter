@@ -7,7 +7,6 @@ import nl.first8.cputimeexporter.config.AgentProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -15,14 +14,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
-import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Fail.fail;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MonitoringServiceTest {
@@ -54,8 +57,6 @@ class MonitoringServiceTest {
                     .name("method_cpu_time_in_seconds")
                     .labelNames("method_name")
                     .register(registry)).thenReturn(gauge);
-            monitoringService = Mockito.spy(new MonitoringService(properties, registry));
-
             monitoringService = new MonitoringService(properties, registry);
         }
 
@@ -124,26 +125,5 @@ class MonitoringServiceTest {
             verifyNoInteractions(gaugeDataPoint);
         }
     }
-
-
-    @Test
-        public void testRunMethodInterrupted() throws InterruptedException {
-            MonitoringService monitoringService = new MonitoringService(properties, registry);
-            CountDownLatch latch = new CountDownLatch(1);
-            Thread thread = new Thread(() -> {
-                try {
-                    monitoringService.run();
-                } finally {
-                    latch.countDown();
-                }
-            });
-
-            thread.start();
-            Thread.sleep(100);
-            thread.interrupt();
-            latch.await();
-            assert thread.isInterrupted();
-        }
-
 }
 

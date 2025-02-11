@@ -63,7 +63,9 @@ public class MonitoringService implements Runnable {
 
 		while (!Thread.currentThread().isInterrupted()) { // While loop will stop when the jvm and/or thread is destroyed. Until then, we need this loop to be active
 			try {
-				monitorApplication();
+				var samples = sample();
+				var methodsStatsFiltered = extractStats(samples, properties::isInPackageToMonitor);
+				calculateAndStoreMethodTimeInSeconds(methodsStatsFiltered);
 				Thread.sleep(sampleRateMilliseconds);
 			}
 			catch (InterruptedException exception) {
@@ -74,19 +76,13 @@ public class MonitoringService implements Runnable {
 		}
 	}
 
-	public void monitorApplication() {
-		var samples = sample();
-		var methodsStatsFiltered = extractStats(samples, properties::isInPackageToMonitor);
-		this.calculateAndStoreMethodTimeInSeconds(methodsStatsFiltered);
-	}
-
 	/**
 	 * Performs the sampling step. Collects a set of stack traces for each thread. The
 	 * sampling step is performed multiple time at the frequency of
 	 * SAMPLE_RATE_MILLSECONDS, for the duration of SAMPLE_TIME_MILLISECONDS
 	 * @return for each Thread, a List of it's the stack traces
 	 */
-    Map<Thread, List<StackTraceElement[]>> sample() {
+    private Map<Thread, List<StackTraceElement[]>> sample() {
 		Map<Thread, List<StackTraceElement[]>> result = new HashMap<>();
 		try {
 			for (long duration = 0; duration < SAMPLE_TIME_MILLISECONDS; duration += sampleRateMilliseconds) {
