@@ -20,6 +20,9 @@ To build the cpu-time-exporter, run:
 As alternative, you can also download the latest release on https://github.com/First8/cpu-time-exporter/releases
 
 ## Run
+When running the java-agent, a properties file is required. See `config.properties` for more info.
+
+Run your jar with the java agent like so:
 ```
 java -javaagent:cpu-time-exporter-$version.jar -jar yourJar.jar -Dcputimeexporter.config=config.properties
 ```
